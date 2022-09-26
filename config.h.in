@@ -45,9 +45,6 @@
 /* Have QUIC support */
 #undef HAVE_QUIC
 
-/* Have RAPIDO support */
-#undef HAVE_RAPIDO
-
 /* Define to 1 if you have the <stddef.h> header file. */
 #undef HAVE_STDDEF_H
 
@@ -80,6 +77,9 @@
 
 /* Define to 1 if you have the <sys/types.h> header file. */
 #undef HAVE_SYS_TYPES_H
+
+/* Have TCPLS support */
+#undef HAVE_TCPLS
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H

@@ -650,8 +650,8 @@ LIBOBJS
 PREFIX
 QUICLIBS
 TLSLIBS
-RAPIDOLIBS
-HAVE_RAPIDO
+TCPLSLIBS
+HAVE_TCPLS
 HAVE_QUIC
 LN_S
 INSTALL_DATA
@@ -5048,7 +5048,7 @@ fi
 
 quiclibs=
 tlslibs=
-rapidolibs=
+tcplslibs=
 
 
 # Check whether --with-picotls was given.
@@ -5231,6 +5231,7 @@ else $as_nop
 fi
 
 
+CFLAGS="-I$with_rapido/include/ $CFLAGS"
 LDFLAGS="-L$with_rapido $LDFLAGS"
 
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for rapido_new_server in -lpicotls-rapido" >&5
@@ -5274,20 +5275,21 @@ then :
 fi
 
 if test "$have_rapido" = "yes"; then
-    rapidolibs="-lpicotls-rapido"
+    tcplslibs="-lpicotls-rapido -lpicotls-core -lpicotls-openssl"
 
 
-printf "%s\n" "#define HAVE_RAPIDO 1" >>confdefs.h
+printf "%s\n" "#define HAVE_TCPLS 1" >>confdefs.h
 
-    HAVE_RAPIDO=1
+    HAVE_TCPLS=1
 
+    echo "INFO: rapido was found, support is activated."
 else
-    echo "INFO: Rapido was not found, support is not activated."
+    echo "WARNING! rapido was not found, support is not activated."
 fi
 LIBS="$save_LIBS"
 
 
-RAPIDOLIBS=$rapidolibs
+TCPLSLIBS=$tcplslibs
 
 TLSLIBS=$tlslibs
 

@@ -18,6 +18,9 @@ struct http_parser_settings parser_settings;
 #ifdef HAVE_QUIC
 #include "quic.h"
 #endif
+#ifdef HAVE_TCPLS
+#include "tcpls.h"
+#endif
 
 
 struct config cfg;
@@ -184,11 +187,7 @@ int main(int argc, char **argv) {
         sock.readable = ssl_readable;
     }
     else if (!strncmp("rapido", schema, 5)) {
-        if ((cfg.ctx = rapido_init()) == NULL) {
-            fprintf(stderr, "unable to initialize RAPIDO\n");
-            ERR_print_errors_fp(stderr);
-            exit(1);
-        }
+        /* rapido wraps the SSL ctx*/
         sock.connect  = rapido_connect;
         sock.close    = rapido_close;
         sock.read     = rapido_read;
@@ -596,7 +595,7 @@ static int response_complete(http_parser *parser) {
     connection *c = parser->data;
     thread *thread = c->thread;
     int status = parser->status_code;
-    printf("Response complete\n");
+    //printf("Response complete\n");
 
     if (status > 399) {
         thread->errors.status++;
@@ -618,7 +617,7 @@ static int response_complete(http_parser *parser) {
 
     if (!http_should_keep_alive(parser)) {
 
-        fprintf(stderr, "Request complete, reconnecting\n");
+        //fprintf(stderr, "Request complete, reconnecting\n");
         cfg.proto->reconnect(thread, c);
         goto done;
     }
@@ -630,7 +629,7 @@ static int response_complete(http_parser *parser) {
 }
 
 static void socket_connected(aeEventLoop *loop, int fd, void *data, int mask) {
-    printf("Socket connected\n!");
+    //printf("Socket connected\n!");
     connection *c = data;
     eagain:
     switch (sock.connect(c, cfg.host)) {

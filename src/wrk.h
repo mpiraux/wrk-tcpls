@@ -14,6 +14,9 @@
 #if HAVE_QUIC
 #include <picoquic.h>
 #endif
+#if HAVE_TCPLS
+#include <rapido.h>
+#endif
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -76,6 +79,9 @@ typedef struct connection {
             SSL *ssl;
 #if HAVE_QUIC
             picoquic_cnx_t* cnx;
+#endif
+#if HAVE_TCPLS
+            rapido_session_t* session;
 #endif
     };
     double throughput;

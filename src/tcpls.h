@@ -1,8 +1,17 @@
-//STUB
-#ifndef RAPIDO_H
-#define RAPIDO_H
+#ifndef TCPLS_H
+#define TCPLS_H
 
+#include <assert.h>
 #include "net.h"
+#include "rapido.h"
+
+#define DEBUG 0
+#if DEBUG
+#define debug(s) (printf("[%f - %p] " s "\n", (float)time_us() / 1000000, c))
+#define debug(s, ...) (printf("[%f - %p] " s "\n", (float)time_us() / 1000000, c, ##__VA_ARGS__))
+#else
+#define debug(...)
+#endif
 
 //Called once to initialize the Rapido library
 void *rapido_init();
@@ -21,4 +30,4 @@ size_t rapido_readable(connection *);
 
 //rapido_writable could be written also if needed
 
-#endif /* RAPIDO_H */
+#endif /* TCPLS_H */
