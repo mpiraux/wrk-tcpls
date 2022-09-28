@@ -15,26 +15,31 @@ jobs:
     - uses: actions/checkout@v2
     - name: picotls
       run: |
-        git clone https://github.com/huitema/picotls.git
-        cd picotls
+        git clone https://github.com/huitema/picotls.git ../picotls
+        cd ../picotls
         git submodule init
         git submodule update
         cmake .
         make
-        cd ..
-    - name: picoquic
+        cd $GITHUB_WORKSPACE
+    - name: rapido
       run: |
-        git clone https://github.com/private-octopus/picoquic.git
-        cd picoquic
+        git clone https://github.com/mpiraux/rapido.git ../rapido
+        cd ../rapido
+        git submodule init
+        git submodule update
         cmake .
         make
-        make DESTDIR=$(pwd)/../ install
-         cd ..
+        cd $GITHUB_WORKSPACE
+    - name: picoquic
+      run: |
+        git clone https://github.com/private-octopus/picoquic.git ../picoquic
+        cd ../picoquic
+        cmake .
+        make
+        cd $GITHUB_WORKSPACE
     - name: build
       run: |
         ./autogen.sh
-        export LD_LIBRARY_PATH=$(pwd)/usr/local/lib/:$(pwd)/picoquic/:$LD_LIBRARY_PATH
-        ls usr/local/
-        ls usr/local/lib
-        ./configure "CFLAGS=-I$(pwd)/usr/local/include/ -I$(pwd)/picoquic/picoquic/" "LDFLAGS=-L$(pwd)/picoquic/"
+        ./configure
         make
