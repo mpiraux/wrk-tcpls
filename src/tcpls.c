@@ -38,8 +38,9 @@ status rapido_connect(connection *c, char *host) {
         debug("rapido_connect: c->fd is not valid");
         return ERROR;
     }
-    ptls_key_exchange_algorithm_t *key_exchanges[128] = {&ptls_openssl_secp256r1};
-    ptls_cipher_suite_t *cipher_suites[128] = {NULL};
+    ptls_key_exchange_algorithm_t **key_exchanges = calloc(128, sizeof(ptls_key_exchange_algorithm_t *));
+    key_exchanges[0] = &ptls_openssl_secp256r1;
+    ptls_cipher_suite_t **cipher_suites = calloc(128, sizeof(ptls_cipher_suite_t *));
     ptls_context_t *ctx = malloc(sizeof(ptls_context_t));
     ctx->random_bytes = ptls_openssl_random_bytes;
     ctx->get_time = &ptls_get_time;
@@ -71,6 +72,9 @@ status rapido_close(connection *c) {
     if (!c->session->is_closed) {
         rapido_close_session(c->session, 0);
     }
+    free(c->session->tls_ctx->key_exchanges);
+    free(c->session->tls_ctx->cipher_suites);
+    free(c->session->tls_ctx);
     rapido_session_free(c->session);
     free(c->session);
     c->session = NULL;
