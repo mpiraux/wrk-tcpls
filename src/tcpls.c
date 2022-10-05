@@ -29,41 +29,58 @@ void *rapido_init() {
 
 //Connect connection c to host
 status rapido_connect(connection *c, char *host) {
-    if (c->session) {
-        debug("rapido_connect: c->session is not NULL");
-        exit(0);
-        return ERROR;
-    }
     if (c->fd < 0) {
         debug("rapido_connect: c->fd is not valid");
         return ERROR;
     }
-    ptls_key_exchange_algorithm_t **key_exchanges = calloc(128, sizeof(ptls_key_exchange_algorithm_t *));
-    key_exchanges[0] = &ptls_openssl_secp256r1;
-    ptls_cipher_suite_t **cipher_suites = calloc(128, sizeof(ptls_cipher_suite_t *));
-    ptls_context_t *ctx = malloc(sizeof(ptls_context_t));
-    ctx->random_bytes = ptls_openssl_random_bytes;
-    ctx->get_time = &ptls_get_time;
-    ctx->key_exchanges = key_exchanges;
-    ctx->cipher_suites = cipher_suites;
-    size_t i;
-    for (i = 0; ptls_openssl_cipher_suites[i] != NULL; ++i)
-        cipher_suites[i] = ptls_openssl_cipher_suites[i];
+    if (c->session == NULL) {   
+        ptls_key_exchange_algorithm_t **key_exchanges = calloc(128, sizeof(ptls_key_exchange_algorithm_t *));
+        key_exchanges[0] = &ptls_openssl_secp256r1;
+        ptls_cipher_suite_t **cipher_suites = calloc(128, sizeof(ptls_cipher_suite_t *));
+        ptls_context_t *ctx = malloc(sizeof(ptls_context_t));
+        ctx->random_bytes = ptls_openssl_random_bytes;
+        ctx->get_time = &ptls_get_time;
+        ctx->key_exchanges = key_exchanges;
+        ctx->cipher_suites = cipher_suites;
+        size_t i;
+        for (i = 0; ptls_openssl_cipher_suites[i] != NULL; ++i)
+            cipher_suites[i] = ptls_openssl_cipher_suites[i];
 
-    c->session = rapido_new_session(ctx, false, host, NULL);
-    struct sockaddr_storage local_address, peer_address;
-    socklen_t local_address_len = sizeof(struct sockaddr_storage), peer_address_len = sizeof(struct sockaddr_storage);
-    if (getsockname(c->fd, &local_address, &local_address_len)) {
-        debug("rapido_connect: getsockname error");
-        return ERROR;
+        c->session = rapido_new_session(ctx, false, host, NULL);
+        struct sockaddr_storage local_address, peer_address;
+        socklen_t local_address_len = sizeof(struct sockaddr_storage), peer_address_len = sizeof(struct sockaddr_storage);
+        if (getsockname(c->fd, &local_address, &local_address_len)) {
+            debug("rapido_connect: getsockname error");
+            return ERROR;
+        }
+        if (getpeername(c->fd, &peer_address, &peer_address_len)) {
+            debug("rapido_connect: getpeername error");
+            return ERROR;
+        }
+        rapido_address_id_t laid = rapido_add_address(c->session, &local_address, local_address_len);
+        rapido_address_id_t raid = rapido_add_remote_address(c->session, &peer_address, peer_address_len);
+        rapido_connection_id_t connection_id = rapido_client_add_connection(c->session, c->fd, laid, raid);
     }
-    if (getpeername(c->fd, &peer_address, &peer_address_len)) {
-        debug("rapido_connect: getpeername error");
-        return ERROR;
+    uint8_t recvbuf[16384 + 256];
+    size_t processed = sizeof(recvbuf);
+    int ret = recv(c->fd, recvbuf, processed, 0);
+    if (ret == -1 && errno == EAGAIN)
+        return RETRY;
+    processed = ret;
+    ret = rapido_client_process_handshake(c->session, 0, recvbuf, &processed);
+    uint8_t sendbuf[16384 + 256];
+    size_t sendbuf_len = sizeof(sendbuf);
+    rapido_prepare_data(c->session, 0, get_usec_time(), sendbuf, &sendbuf_len);
+    if (sendbuf_len > 0) {
+        size_t written = write(c->fd, sendbuf, sendbuf_len);
+        if (written != sendbuf_len) {
+            debug("Partial write!");
+            return ERROR;
+        }
     }
-    rapido_address_id_t laid = rapido_add_address(c->session, &local_address, local_address_len);
-    rapido_address_id_t raid = rapido_add_remote_address(c->session, &peer_address, peer_address_len);
-    rapido_connection_id_t connection_id = rapido_client_add_connection(c->session, c->fd, laid, raid);
+    if (!ptls_handshake_is_complete(c->session->tls)) {
+        return RETRY;
+    }
     return OK;
 }
 //Close connection c
@@ -86,16 +103,14 @@ status rapido_read(connection *c, size_t *sz) {
     if (c->session->is_closed) {
         return ERROR;
     }
-    debug("Called %s", __FUNCTION__);
+    if (!ptls_handshake_is_complete(c->session->tls)) {
+        return ERROR;
+    }
     uint64_t current_time = get_usec_time();
     uint8_t recvbuf[16384 + 256];
     int recvd = read(c->fd, recvbuf, sizeof(recvbuf));
     size_t processed = recvd;
-    if (!ptls_handshake_is_complete(c->session->tls)) {
-        rapido_client_process_handshake(c->session, 0, recvbuf, &processed);
-    } else {
-        rapido_process_incoming_data(c->session, 0, get_usec_time(), recvbuf, &processed);
-    }
+    rapido_process_incoming_data(c->session, 0, get_usec_time(), recvbuf, &processed);
     if (processed != recvd) {
         debug("Did not process all bytes");
         return ERROR;
@@ -132,15 +147,13 @@ status rapido_write(connection *c, char *buf, size_t sz, size_t *wrote) {
     rapido_add_to_stream(c->session, stream_id, buf, sz);
     rapido_attach_stream(c->session, stream_id, 0);
     rapido_close_stream(c->session, stream_id);
-    if (ptls_handshake_is_complete(c->session->tls)) {
-        uint8_t sendbuf[16384 + 256];
-        size_t sendbuf_len = sizeof(sendbuf);
-        rapido_prepare_data(c->session, 0, get_usec_time(), sendbuf, &sendbuf_len);
-        size_t written = write(c->fd, sendbuf, sendbuf_len);
-        if (written != sendbuf_len) {
-            debug("Partial write!");
-            return ERROR;
-        }
+    uint8_t sendbuf[16384 + 256];
+    size_t sendbuf_len = sizeof(sendbuf);
+    rapido_prepare_data(c->session, 0, get_usec_time(), sendbuf, &sendbuf_len);
+    size_t written = write(c->fd, sendbuf, sendbuf_len);
+    if (written != sendbuf_len) {
+        debug("Partial write!");
+        return ERROR;
     }
     *wrote = sz; // TODO: Handle partial writes
     return OK;

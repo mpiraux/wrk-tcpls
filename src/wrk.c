@@ -188,6 +188,7 @@ int main(int argc, char **argv) {
     }
     else if (!strncmp("rapido", schema, 5)) {
         /* rapido wraps the SSL ctx*/
+        rapido_init();
         sock.connect  = rapido_connect;
         sock.close    = rapido_close;
         sock.read     = rapido_read;
