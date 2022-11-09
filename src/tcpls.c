@@ -63,11 +63,16 @@ status rapido_connect(connection *c, char *host) {
     }
     uint8_t recvbuf[16384 + 256];
     size_t processed = sizeof(recvbuf);
-    int ret = recv(c->fd, recvbuf, processed, 0);
-    if (ret == -1 && errno == EAGAIN)
+    int ret = recv(c->fd, recvbuf, processed, MSG_WAITALL);
+    if (ret > 0) {
+        processed = ret;
+        size_t recvd_len = ret;
+        ret = rapido_client_process_handshake(c->session, 0, recvbuf, &processed);
+        assert(processed == recvd_len);
+    }
+    if (!ptls_handshake_is_complete(c->session->tls)) {
         return RETRY;
-    processed = ret;
-    ret = rapido_client_process_handshake(c->session, 0, recvbuf, &processed);
+    }
     uint8_t sendbuf[16384 + 256];
     size_t sendbuf_len = sizeof(sendbuf);
     rapido_prepare_data(c->session, 0, get_usec_time(), sendbuf, &sendbuf_len);
@@ -77,9 +82,6 @@ status rapido_connect(connection *c, char *host) {
             debug("Partial write!");
             return ERROR;
         }
-    }
-    if (!ptls_handshake_is_complete(c->session->tls)) {
-        return RETRY;
     }
     return OK;
 }
