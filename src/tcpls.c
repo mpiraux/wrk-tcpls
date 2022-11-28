@@ -1,3 +1,4 @@
+#include <sys/ioctl.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/engine.h>
@@ -46,7 +47,7 @@ status rapido_connect(connection *c, char *host) {
         for (i = 0; ptls_openssl_cipher_suites[i] != NULL; ++i)
             cipher_suites[i] = ptls_openssl_cipher_suites[i];
 
-        c->session = rapido_new_session(ctx, false, host, NULL);
+        c->session = rapido_new_session(ctx, false, host, DEBUG ? stderr : NULL);
         struct sockaddr_storage local_address, peer_address;
         socklen_t local_address_len = sizeof(struct sockaddr_storage), peer_address_len = sizeof(struct sockaddr_storage);
         if (getsockname(c->fd, &local_address, &local_address_len)) {
@@ -102,6 +103,7 @@ status rapido_close(connection *c) {
 //File descriptor has some data available for conection c
 //will write this data in c->buf and write the amount of bytes written in *sz
 status rapido_read(connection *c, size_t *sz) {
+    debug("Called %s with sz: %zu", __FUNCTION__, *sz);
     if (c->session->is_closed) {
         return ERROR;
     }
@@ -122,8 +124,12 @@ status rapido_read(connection *c, size_t *sz) {
         if (notification->notification_type == rapido_stream_has_data) {
             size_t read_len = sizeof(c->buf) - *sz;
             void *ptr = rapido_read_stream(c->session, 0, &read_len);
-            memcpy(c->buf + *sz, ptr, read_len);
-            *sz += read_len;
+            do {
+                memcpy(c->buf + *sz, ptr, read_len);
+                *sz += read_len;
+                read_len = sizeof(c->buf) - *sz;
+                ptr = rapido_read_stream(c->session, 0, &read_len);
+            } while (ptr != NULL);
         }
         if (*sz >= sizeof(c->buf)) {
             break;
@@ -145,23 +151,32 @@ status rapido_read(connection *c, size_t *sz) {
 //File descriptor is ready to write sz bytes into buffer buf. The amount actually written is returned in *wrote 
 status rapido_write(connection *c, char *buf, size_t sz, size_t *wrote) {
     debug("Called %s with buf: %p, sz: %zu, wrote: %p", __FUNCTION__, buf, sz, wrote);
+    uint64_t current_time = get_usec_time();
     rapido_stream_id_t stream_id = rapido_open_stream(c->session);
     rapido_add_to_stream(c->session, stream_id, buf, sz);
     rapido_attach_stream(c->session, stream_id, 0);
     rapido_close_stream(c->session, stream_id);
-    uint8_t sendbuf[16384 + 256];
-    size_t sendbuf_len = sizeof(sendbuf);
-    rapido_prepare_data(c->session, 0, get_usec_time(), sendbuf, &sendbuf_len);
-    size_t written = write(c->fd, sendbuf, sendbuf_len);
-    if (written != sendbuf_len) {
-        debug("Partial write!");
-        return ERROR;
-    }
+
+    rapido_array_iter(&c->session->connections, i, rapido_connection_t *connection, {
+        int is_blocked = false;
+        assert(rapido_connection_wants_to_send(c->session, connection, current_time, &is_blocked));
+        assert(!is_blocked);
+        uint8_t sendbuf[16384 + 256];
+        size_t sendbuf_len = sizeof(sendbuf);
+        rapido_prepare_data(c->session, 0, current_time, sendbuf, &sendbuf_len);
+        size_t written = write(c->fd, sendbuf, sendbuf_len);
+        if (written != sendbuf_len) {
+            debug("Partial write!");
+            return ERROR;
+        }
+    });
     *wrote = sz; // TODO: Handle partial writes
     return OK;
 }
 //File descriptor is readable, should return the number of bytes actually available (e.g. for SSL calls SSL_Pending
 size_t rapido_readable(connection *c) {
     debug("Called %s", __FUNCTION__);
-    return ERROR;
+    size_t n;
+    int ret = ioctl(c->fd, FIONREAD, &n);
+    return ret == -1 ? 0 : n;
 }
