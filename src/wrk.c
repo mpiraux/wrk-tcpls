@@ -188,7 +188,7 @@ int main(int argc, char **argv) {
     }
     else if (!strncmp("rapido", schema, 5)) {
         /* rapido wraps the SSL ctx*/
-        rapido_init();
+        rapido_init(socket_readable, socket_writeable);
         sock.connect  = rapido_connect;
         sock.close    = rapido_close;
         sock.read     = rapido_read;
@@ -662,7 +662,11 @@ static void socket_connected(aeEventLoop *loop, int fd, void *data, int mask) {
 
 static void socket_writeable(aeEventLoop *loop, int fd, void *data, int mask) {
     connection *c = data;
+#ifdef HAVE_TCPLS
+    assert(fd == c->fd || c->session);
+#else
     assert(fd == c->fd);
+#endif
     sock.writeable(c, loop);
 }
 

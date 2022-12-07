@@ -101,7 +101,7 @@ AC_ARG_WITH([rapido],
 CFLAGS="-I$with_rapido/include/ $CFLAGS"
 LDFLAGS="-L$with_rapido $LDFLAGS"
 
-AC_CHECK_LIB([picotls-rapido],[rapido_new_server],[have_rapido=yes])
+AC_CHECK_LIB([picotls-rapido],[picotls-core],[rapido_new_server],[have_rapido=yes])
 if test "$have_rapido" = "yes"; then
     tcplslibs="-lpicotls-rapido -lpicotls-core -lpicotls-openssl"
 

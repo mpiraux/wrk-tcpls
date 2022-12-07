@@ -14,7 +14,7 @@
 #endif
 
 //Called once to initialize the Rapido library
-void *rapido_init();
+void *rapido_init(void *r, void *w);
 
 //Connect connection c to host
 status rapido_connect(connection *c, char *host);
